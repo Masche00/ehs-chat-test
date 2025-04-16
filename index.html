@@ -26,12 +26,20 @@ const log = (msg) => {
   console.log(msg);
 };
 
-const token = "ehs_" + Math.random().toString(16).slice(2, 10);
-log("Token stanza: " + token);
-
-const server = "https://ehs-relay.vercel.app/";
-let pc = new RTCPeerConnection();
+let token;
+let pc;
 let channel;
+const server = "https://ehs-relay.vercel.app/";
+
+async function startOffer() {
+  token = "ehs_" + Math.random().toString(16).slice(2, 10);
+  log("Token stanza: " + token);
+
+  pc = new RTCPeerConnection();
+  channel = pc.createDataChannel("chat");
+
+  // tutto il resto del codice rimane uguale
+}
 
 async function postData(path, data) {
   log("[POST] Invio a: " + server + path);
