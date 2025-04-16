@@ -89,6 +89,8 @@ async function startAnswer() {
     channel.onopen = () => log("Canale aperto (Answer)");
   };
 
+<!-- Forza aggiornamento GitHub Pages -->
+  
   const offer = await getData(token);
   if (!offer || !offer.type) {
     log("Nessuna offerta valida ricevuta");
