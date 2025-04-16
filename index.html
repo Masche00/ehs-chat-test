@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>EHS Chat Debug (Timed 2min)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+    button { margin: 10px; padding: 10px; font-size: 18px; }
+    #log { margin-top: 20px; white-space: pre-wrap; border: 1px solid #0f0; padding: 10px; max-height: 300px; overflow-y: auto; }
+    #countdown { font-size: 20px; color: #0ff; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<h1>EHS Chat Debug (Timed)</h1>
+<button onclick="startOffer()">Inizia (Offer)</button>
+<button onclick="startAnswer()">Rispondi (Answer)</button>
+
+<div id="countdown"></div>
+<div id="log">[LOG]</div>
+
+<script>
+let token;
+let pc;
+let channel;
+const server = "https://ehs-relay.vercel.app/";
+const TIMEOUT_SECONDS = 120;
+
+const log = (msg) => {
+  const logDiv = document.getElementById("log");
+  logDiv.textContent += "\n" + msg;
+  console.log(msg);
+};
+
+function postData(path, data) {
+  log("[POST] Invio a: " + server + path);
+  return fetch(server + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  .then(res => res.text())
+  .then(text => log("[POST] Risposta server: " + text))
+  .catch(err => log("[POST] Errore: " + err.message));
+}
+
+function getData(path) {
+  log("[GET] Chiedo a: " + server + path);
+  return fetch(server + path)
+    .then(res => res.json())
+    .then(json => {
+      log("[GET] Risposta ricevuta");
+      return json;
+    })
+    .catch(err => {
+      log("[GET] Errore: " + err.message);
+    });
+}
+
+function startCountdown() {
+  const countdown = document.getElementById("countdown");
+  let timeLeft = TIMEOUT_SECONDS;
+  countdown.textContent = "Invito valido per: " + timeLeft + " secondi";
+  const timer = setInterval(() => {
+    timeLeft--;
+    countdown.textContent = "Invito valido per: " + timeLeft + " secondi";
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      countdown.textContent = "Invito scaduto.";
+      log("[TIMEOUT] Invito scaduto dopo " + TIMEOUT_SECONDS + " secondi");
+    }
+  }, 1000);
+}
+
+async function startOffer() {
+  try {
+    token = "ehs_" + Math.random().toString(16).slice(2, 10);
+    log("Token stanza: " + token);
+    startCountdown();
+
+    pc = new RTCPeerConnection();
+    channel = pc.createDataChannel("chat");
+
+    channel.onopen = () => log("Canale aperto (Offer)");
+    channel.onmessage = (e) => log("Messaggio ricevuto: " + e.data);
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    log("Offerta creata");
+
+    await postData(token, offer);
+    log("Offerta inviata");
+
+    const poll = setInterval(async () => {
+      const answer = await getData(token);
+      if (answer && answer.type === "answer") {
+        clearInterval(poll);
+        log("Risposta ricevuta");
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    }, 1000);
+  } catch (err) {
+    log("[ERROR] startOffer: " + err.message);
+  }
+}
+
+async function startAnswer() {
+  try {
+    token = prompt("Inserisci token stanza (ehs_xxxxxxxx):");
+    if (!token) return;
+
+    log("Token stanza: " + token);
+    pc = new RTCPeerConnection();
+
+    pc.ondatachannel = (event) => {
+      channel = event.channel;
+      channel.onmessage = (e) => log("Messaggio ricevuto: " + e.data);
+      channel.onopen = () => log("Canale aperto (Answer)");
+    };
+
+    const offer = await getData(token);
+    if (!offer || !offer.type) {
+      log("Nessuna offerta valida ricevuta");
+      return;
+    }
+
+    log("Offerta ricevuta");
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await postData(token, answer);
+    log("Risposta inviata");
+  } catch (err) {
+    log("[ERROR] startAnswer: " + err.message);
+  }
+}
+</script>
+</body>
+</html>
